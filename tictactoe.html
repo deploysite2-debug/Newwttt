@@ -36,9 +36,117 @@
 
         .status {
             font-size: 1.25rem;
-            color: #666;
+            color: #555;
             margin-bottom: 1.5rem;
             min-height: 30px;
+        }
+
+        .connection {
+            display: grid;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .connection form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 0.75rem;
+            align-items: end;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+            gap: 0.35rem;
+        }
+
+        .input-group label {
+            font-size: 0.9rem;
+            color: #555;
+            font-weight: 600;
+        }
+
+        .input-group input {
+            padding: 0.65rem 0.75rem;
+            border: 1px solid #dcdcdc;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+        }
+
+        .join-btn {
+            height: 48px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .join-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+            box-shadow: none;
+        }
+
+        .join-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .connection-message {
+            font-size: 0.95rem;
+            color: #666;
+            min-height: 22px;
+        }
+
+        .connection-message.error {
+            color: #ff6b6b;
+        }
+
+        .connection-message.success {
+            color: #2ecc71;
+        }
+
+        .players {
+            display: flex;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .players .player {
+            background: #f8f8ff;
+            color: #555;
+            padding: 0.4rem 0.9rem;
+            border-radius: 999px;
+            border: 1px solid #d8daf5;
+            font-size: 0.95rem;
+            display: inline-flex;
+            gap: 0.4rem;
+            align-items: center;
+        }
+
+        .players .player.you {
+            border-color: #667eea;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .players .player.offline {
+            opacity: 0.6;
         }
 
         .board {
@@ -52,6 +160,11 @@
             border-radius: 10px;
         }
 
+        .board.locked {
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
         .cell {
             background: white;
             border: none;
@@ -60,6 +173,10 @@
             cursor: pointer;
             transition: all 0.3s ease;
             color: #333;
+        }
+
+        .board.locked .cell {
+            cursor: not-allowed;
         }
 
         .cell:hover:not(.taken) {
@@ -109,13 +226,46 @@
         .reset-btn:active {
             transform: translateY(0);
         }
+
+        .reset-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        @media (max-width: 600px) {
+            .board {
+                grid-template-columns: repeat(3, 90px);
+                grid-template-rows: repeat(3, 90px);
+            }
+
+            .cell {
+                font-size: 2rem;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Tic-Tac-Toe</h1>
-        <div class="status" id="status">Player X's turn</div>
-        <div class="board" id="board">
+        <div class="connection">
+            <form id="joinForm">
+                <div class="input-group">
+                    <label for="gameIdInput">Game ID</label>
+                    <input type="text" id="gameIdInput" placeholder="e.g. purple-fox" required>
+                </div>
+                <div class="input-group">
+                    <label for="playerNameInput">Your Name</label>
+                    <input type="text" id="playerNameInput" placeholder="e.g. Alex" required>
+                </div>
+                <button type="submit" class="join-btn" id="joinBtn">Join Game</button>
+            </form>
+            <p class="connection-message" id="connectionMessage">Create or join a game by entering a Game ID and your name.</p>
+        </div>
+        <div class="players" id="playersList"></div>
+        <div class="status" id="status">Waiting to connect...</div>
+        <div class="board locked" id="board">
             <button class="cell" data-index="0"></button>
             <button class="cell" data-index="1"></button>
             <button class="cell" data-index="2"></button>
@@ -126,97 +276,375 @@
             <button class="cell" data-index="7"></button>
             <button class="cell" data-index="8"></button>
         </div>
-        <button class="reset-btn" id="resetBtn">New Game</button>
+        <button class="reset-btn" id="resetBtn" disabled>New Game</button>
     </div>
 
     <script>
-        const cells = document.querySelectorAll('.cell');
+        const cells = Array.from(document.querySelectorAll('.cell'));
+        const boardEl = document.getElementById('board');
         const statusDisplay = document.getElementById('status');
         const resetBtn = document.getElementById('resetBtn');
-        
-        let currentPlayer = 'X';
-        let gameActive = true;
-        let gameState = ['', '', '', '', '', '', '', '', ''];
-        
-        const winningConditions = [
-            [0, 1, 2],
-            [3, 4, 5],
-            [6, 7, 8],
-            [0, 3, 6],
-            [1, 4, 7],
-            [2, 5, 8],
-            [0, 4, 8],
-            [2, 4, 6]
-        ];
+        const joinForm = document.getElementById('joinForm');
+        const joinBtn = document.getElementById('joinBtn');
+        const gameIdInput = document.getElementById('gameIdInput');
+        const playerNameInput = document.getElementById('playerNameInput');
+        const connectionMessage = document.getElementById('connectionMessage');
+        const playersList = document.getElementById('playersList');
 
-        function handleCellClick(e) {
-            const cell = e.target;
-            const index = parseInt(cell.getAttribute('data-index'));
-            
-            if (gameState[index] !== '' || !gameActive) {
+        let socket = null;
+        let playerId = null;
+        let playerSymbol = null;
+        let currentGameId = null;
+        let latestGameState = null;
+
+        const STORAGE_KEYS = {
+            name: 'ttt-player-name',
+            lastGame: 'ttt-last-game-id'
+        };
+
+        const initialName = localStorage.getItem(STORAGE_KEYS.name);
+        if (initialName) {
+            playerNameInput.value = initialName;
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const presetGameId = urlParams.get('game') || localStorage.getItem(STORAGE_KEYS.lastGame);
+        if (presetGameId) {
+            gameIdInput.value = presetGameId;
+        }
+
+        if (!gameIdInput.value) {
+            gameIdInput.value = generateDefaultGameId();
+        }
+
+        joinForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const gameId = gameIdInput.value.trim();
+            const name = playerNameInput.value.trim();
+
+            if (!gameId || !name) {
+                updateConnectionMessage('Please enter both a Game ID and your name.', 'error');
                 return;
             }
-            
-            gameState[index] = currentPlayer;
-            cell.textContent = currentPlayer;
-            cell.classList.add('taken', currentPlayer.toLowerCase());
-            
-            checkResult();
-        }
 
-        function checkResult() {
-            let roundWon = false;
-            let winningCombination = [];
-            
-            for (let i = 0; i < winningConditions.length; i++) {
-                const [a, b, c] = winningConditions[i];
-                if (gameState[a] === '' || gameState[b] === '' || gameState[c] === '') {
-                    continue;
-                }
-                if (gameState[a] === gameState[b] && gameState[b] === gameState[c]) {
-                    roundWon = true;
-                    winningCombination = [a, b, c];
-                    break;
-                }
-            }
-            
-            if (roundWon) {
-                statusDisplay.textContent = `Player ${currentPlayer} wins!`;
-                gameActive = false;
-                highlightWinningCells(winningCombination);
-                return;
-            }
-            
-            if (!gameState.includes('')) {
-                statusDisplay.textContent = "It's a draw!";
-                gameActive = false;
-                return;
-            }
-            
-            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-            statusDisplay.textContent = `Player ${currentPlayer}'s turn`;
-        }
+            localStorage.setItem(STORAGE_KEYS.name, name);
+            localStorage.setItem(STORAGE_KEYS.lastGame, gameId);
 
-        function highlightWinningCells(combination) {
-            combination.forEach(index => {
-                cells[index].classList.add('winner');
-            });
-        }
-
-        function resetGame() {
-            currentPlayer = 'X';
-            gameActive = true;
-            gameState = ['', '', '', '', '', '', '', '', ''];
-            statusDisplay.textContent = `Player ${currentPlayer}'s turn`;
-            
-            cells.forEach(cell => {
-                cell.textContent = '';
-                cell.classList.remove('taken', 'x', 'o', 'winner');
-            });
-        }
+            connectToGame(gameId, name);
+        });
 
         cells.forEach(cell => cell.addEventListener('click', handleCellClick));
-        resetBtn.addEventListener('click', resetGame);
+        resetBtn.addEventListener('click', requestReset);
+
+        function connectToGame(gameId, name) {
+            disconnectSocket();
+            updateConnectionMessage('Connecting to game...', 'info');
+            setJoinButtonLoading(true);
+            setStatus('Connecting...');
+            boardEl.classList.add('locked');
+            resetBtn.disabled = true;
+
+            const wsUrl = getWebSocketUrl();
+            try {
+                socket = new WebSocket(wsUrl);
+            } catch (err) {
+                updateConnectionMessage('Failed to create a connection. Please check the server.', 'error');
+                setJoinButtonLoading(false);
+                return;
+            }
+
+            const activeSocket = socket;
+
+            activeSocket.addEventListener('open', () => {
+                if (socket !== activeSocket) {
+                    return;
+                }
+                currentGameId = gameId;
+                activeSocket.send(JSON.stringify({
+                    type: 'join',
+                    gameId,
+                    name
+                }));
+            });
+
+            activeSocket.addEventListener('message', (event) => {
+                if (socket !== activeSocket) {
+                    return;
+                }
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch (error) {
+                    console.error('Invalid message from server:', event.data);
+                    return;
+                }
+
+                handleServerMessage(data);
+            });
+
+            activeSocket.addEventListener('close', () => {
+                if (socket !== activeSocket) {
+                    return;
+                }
+                setJoinButtonLoading(false);
+                setStatus('Disconnected. Join a game to play.');
+                updateConnectionMessage('Disconnected from server. You can reconnect by joining again.', 'error');
+                boardEl.classList.add('locked');
+                resetBtn.disabled = true;
+                playersList.innerHTML = '';
+                latestGameState = null;
+                playerSymbol = null;
+                playerId = null;
+            });
+
+            activeSocket.addEventListener('error', () => {
+                if (socket !== activeSocket) {
+                    return;
+                }
+                setJoinButtonLoading(false);
+                updateConnectionMessage('Connection error. Please ensure the server is running.', 'error');
+                boardEl.classList.add('locked');
+                resetBtn.disabled = true;
+            });
+        }
+
+        function disconnectSocket() {
+            if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+                socket.close();
+            }
+            socket = null;
+        }
+
+        function handleServerMessage(data) {
+            switch (data.type) {
+                case 'joined':
+                    playerId = data.playerId;
+                    playerSymbol = data.symbol;
+                    currentGameId = data.gameId;
+                    updateConnectionMessage(data.message || `Connected to game ${currentGameId} as Player ${playerSymbol}.`, 'success');
+                    setJoinButtonLoading(false);
+                    updateUrlWithGameId(currentGameId);
+                    if (data.game) {
+                        updateGameState(data.game);
+                    }
+                    break;
+                case 'state':
+                    updateGameState(data.game);
+                    break;
+                case 'error':
+                    updateConnectionMessage(data.message || 'Something went wrong.', 'error');
+                    setJoinButtonLoading(false);
+                    break;
+                case 'info':
+                    updateConnectionMessage(data.message || '', 'info');
+                    break;
+                default:
+                    console.warn('Unhandled message type:', data);
+            }
+        }
+
+        function updateGameState(game) {
+            latestGameState = game;
+            updateBoard(game.board || [], game.winningCombination || []);
+            renderPlayers(game.players || []);
+            updateStatusForGame(game);
+            const canPlay = canMakeMove(game);
+            boardEl.classList.toggle('locked', !canPlay);
+            resetBtn.disabled = !canRequestReset(game);
+        }
+
+        function handleCellClick(event) {
+            if (!socket || socket.readyState !== WebSocket.OPEN || !latestGameState) {
+                return;
+            }
+
+            const index = parseInt(event.target.getAttribute('data-index'), 10);
+            if (!Number.isInteger(index)) {
+                return;
+            }
+
+            if (latestGameState.board[index] !== '') {
+                return;
+            }
+
+            if (!canMakeMove(latestGameState)) {
+                return;
+            }
+
+            socket.send(JSON.stringify({
+                type: 'move',
+                index
+            }));
+        }
+
+        function requestReset() {
+            if (!socket || socket.readyState !== WebSocket.OPEN || !latestGameState) {
+                return;
+            }
+
+            socket.send(JSON.stringify({
+                type: 'reset'
+            }));
+        }
+
+        function updateBoard(board, winningCombination) {
+            cells.forEach((cell, index) => {
+                const mark = board[index] || '';
+                cell.textContent = mark;
+                cell.classList.toggle('taken', mark !== '');
+                cell.classList.toggle('x', mark === 'X');
+                cell.classList.toggle('o', mark === 'O');
+                cell.classList.toggle('winner', winningCombination.includes(index));
+            });
+        }
+
+        function renderPlayers(players) {
+            playersList.innerHTML = '';
+
+            if (!players.length) {
+                const placeholder = document.createElement('span');
+                placeholder.classList.add('player');
+                placeholder.textContent = 'Waiting for players...';
+                playersList.appendChild(placeholder);
+                return;
+            }
+
+            players.forEach(player => {
+                const playerEl = document.createElement('span');
+                playerEl.classList.add('player');
+                if (player.symbol === playerSymbol) {
+                    playerEl.classList.add('you');
+                }
+                if (!player.connected) {
+                    playerEl.classList.add('offline');
+                }
+                const nameText = player.name ? player.name : 'Waiting...';
+                playerEl.textContent = `${player.symbol}: ${nameText}`;
+                playersList.appendChild(playerEl);
+            });
+
+            if (players.length === 1) {
+                const waitingEl = document.createElement('span');
+                waitingEl.classList.add('player');
+                waitingEl.textContent = 'Waiting for opponent...';
+                playersList.appendChild(waitingEl);
+            }
+        }
+
+        function updateStatusForGame(game) {
+            if (!playerSymbol) {
+                setStatus('Connected as spectator.');
+                return;
+            }
+
+            if (!game || !Array.isArray(game.players)) {
+                setStatus('Waiting for game data...');
+                return;
+            }
+
+            if (game.status === 'waiting') {
+                if (game.players.length === 1 && game.players[0].symbol === playerSymbol) {
+                    setStatus('Waiting for an opponent to join...');
+                } else {
+                    setStatus('Waiting for players to join...');
+                }
+                return;
+            }
+
+            if (game.status === 'playing') {
+                if (game.currentPlayer === playerSymbol) {
+                    setStatus('Your turn!');
+                } else {
+                    const currentPlayer = game.players.find(p => p.symbol === game.currentPlayer);
+                    const name = currentPlayer ? (currentPlayer.name || `Player ${currentPlayer.symbol}`) : `Player ${game.currentPlayer}`;
+                    setStatus(`${name}'s turn`);
+                }
+                return;
+            }
+
+            if (game.status === 'finished') {
+                if (game.result === 'draw') {
+                    setStatus("It's a draw!");
+                } else if (game.winner === playerSymbol) {
+                    setStatus('You win!');
+                } else {
+                    const winner = game.players.find(p => p.symbol === game.winner);
+                    const winnerName = winner ? (winner.name || `Player ${winner.symbol}`) : `Player ${game.winner}`;
+                    setStatus(`${winnerName} wins!`);
+                }
+            }
+        }
+
+        function canMakeMove(game) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                return false;
+            }
+            if (!playerSymbol) {
+                return false;
+            }
+            if (!game || game.status !== 'playing') {
+                return false;
+            }
+            if (!Array.isArray(game.players) || game.players.length < 2) {
+                return false;
+            }
+            return game.currentPlayer === playerSymbol;
+        }
+
+        function canRequestReset(game) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                return false;
+            }
+            if (!game || !Array.isArray(game.players) || game.players.length < 2) {
+                return false;
+            }
+            return game.status !== 'waiting';
+        }
+
+        function setStatus(message) {
+            statusDisplay.textContent = message;
+        }
+
+        function updateConnectionMessage(message, type) {
+            connectionMessage.textContent = message;
+            connectionMessage.classList.remove('error', 'success');
+            if (type === 'error') {
+                connectionMessage.classList.add('error');
+            } else if (type === 'success') {
+                connectionMessage.classList.add('success');
+            }
+        }
+
+        function setJoinButtonLoading(isLoading) {
+            joinBtn.disabled = isLoading;
+            joinBtn.textContent = isLoading ? 'Joining...' : 'Join Game';
+        }
+
+        function getWebSocketUrl() {
+            const { protocol, host } = window.location;
+            if (protocol === 'http:' || protocol === 'https:') {
+                const wsProtocol = protocol === 'https:' ? 'wss' : 'ws';
+                return `${wsProtocol}://${host}/ws`;
+            }
+            return 'ws://localhost:3000/ws';
+        }
+
+        function updateUrlWithGameId(gameId) {
+            if (!history.replaceState || !gameId) {
+                return;
+            }
+            const url = new URL(window.location.href);
+            url.searchParams.set('game', gameId);
+            history.replaceState({}, '', url);
+        }
+
+        function generateDefaultGameId() {
+            const animals = ['falcon', 'tiger', 'whale', 'panda', 'otter', 'lynx', 'koala', 'phoenix'];
+            const colors = ['crimson', 'azure', 'emerald', 'violet', 'golden', 'silver', 'scarlet', 'indigo'];
+            const animal = animals[Math.floor(Math.random() * animals.length)];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            return `${color}-${animal}`;
+        }
     </script>
 </body>
 </html>
