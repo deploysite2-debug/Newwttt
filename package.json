@@ -1,0 +1,12 @@
+{
+  "name": "tic-tac-toe-multiplayer",
+  "version": "1.0.0",
+  "description": "Realtime multiplayer Tic-Tac-Toe with a WebSocket server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
